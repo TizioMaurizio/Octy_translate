@@ -1,0 +1,17 @@
+{
+  "telegram_bot_token": "YOUR_BOT_TOKEN",
+  "whisper_model": "base",
+  "language": "it",
+  "task": "transcribe",
+  "fp16": false,
+  "allowed_user_ids": [],
+  "max_file_size_mb": 2000,
+  "default_output_format": "message",
+  "huggingface_token": "YOUR_HF_TOKEN",
+  "diarization_model": "pyannote/speaker-diarization-3.1",
+  "local_api_server": {
+    "enabled": true,
+    "api_url": "http://localhost:8081/bot{token}/{method}",
+    "file_url": "http://localhost:8081/file/bot{token}/{path}"
+  }
+}

@@ -1,0 +1,41 @@
+# Local app settings and secrets
+.transcriber_ui_state.json
+.transcriber_secrets.json
+.env*
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Media files
+*.mp4
+*.webm
+*.mp3
+*.wav
+*.ogg
+
+# Media/output folders
+input/
+mp3/
+Video/
+diarization/
+transcripts/
+
+# Telegram Bot API local data
+telegram-bot-api-data/
+
+# Test files
+test_output/
+test_sample*
+test_audio*
+
+# Runtime logs
+telegram_bot_transcription_log.json
+telegram_bot_user_settings.json
+telegram_bot_config.json
+realtime_transcript.txt
