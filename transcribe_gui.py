@@ -36,7 +36,7 @@ class TranscriberApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Media Transcriber")
-        self.root.resizable(False, False)
+        self.root.minsize(700, 600)
 
         # Set window icon
         ico_path = Path(__file__).parent / "app.ico"
@@ -49,126 +49,206 @@ class TranscriberApp:
         self.media_files: list[Path] = []
         self.last_log_was_progress = False
 
+        self._configure_styles()
         self._build_ui()
         self._load_saved_state()
         self._load_files()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
+    def _configure_styles(self):
+        style = ttk.Style()
+        # Use a modern theme as base
+        available_themes = style.theme_names()
+        for theme in ("vista", "winnative", "clam"):
+            if theme in available_themes:
+                style.theme_use(theme)
+                break
+
+        # Colors
+        self._bg = "#f5f6fa"
+        self._fg = "#2d3436"
+        self._accent = "#0984e3"
+        self._log_bg = "#1e272e"
+        self._log_fg = "#dfe6e9"
+        self._listbox_bg = "#ffffff"
+        self._listbox_sel = "#74b9ff"
+
+        self.root.configure(bg=self._bg)
+
+        style.configure("TFrame", background=self._bg)
+        style.configure("TLabel", background=self._bg, foreground=self._fg, font=("Segoe UI", 9))
+        style.configure("TLabelframe", background=self._bg, foreground=self._fg)
+        style.configure("TLabelframe.Label", background=self._bg, foreground=self._accent,
+                        font=("Segoe UI", 9, "bold"))
+        style.configure("TCheckbutton", background=self._bg, foreground=self._fg, font=("Segoe UI", 9))
+        style.configure("TButton", font=("Segoe UI", 9), padding=(10, 4))
+        style.configure("TEntry", padding=3)
+        style.configure("TCombobox", padding=3)
+
+        # Accent button style for primary action
+        style.configure("Accent.TButton", font=("Segoe UI", 10, "bold"), padding=(14, 6))
+        style.map("Accent.TButton",
+                  background=[("active", "#0652DD"), ("!disabled", self._accent)],
+                  foreground=[("!disabled", "#ffffff")])
+
+        # Progress bar color
+        style.configure("TProgressbar", troughcolor="#dfe6e9", background=self._accent, thickness=8)
+
+        # Status label style
+        style.configure("Status.TLabel", background=self._bg, foreground="#636e72", font=("Segoe UI", 9, "italic"))
+
     def _build_ui(self):
+        # Main container with padding
+        main = ttk.Frame(self.root, padding=12)
+        main.pack(fill="both", expand=True)
+        main.columnconfigure(0, weight=1)
+        main.rowconfigure(1, weight=1)  # file list expands
+        main.rowconfigure(4, weight=2)  # log expands more
+
         # --- Input folder ---
-        frame_dir = ttk.LabelFrame(self.root, text="Input Folder", padding=8)
-        frame_dir.pack(fill="x", padx=10, pady=(10, 4))
+        frame_dir = ttk.LabelFrame(main, text="Input Folder", padding=(12, 8))
+        frame_dir.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        frame_dir.columnconfigure(0, weight=1)
 
         self.dir_var = tk.StringVar(value=str(Path(".").resolve()))
-        ttk.Entry(frame_dir, textvariable=self.dir_var, width=60).pack(side="left", fill="x", expand=True)
-        ttk.Button(frame_dir, text="Browse…", command=self._browse_folder).pack(side="left", padx=(6, 0))
+        dir_entry = ttk.Entry(frame_dir, textvariable=self.dir_var, font=("Segoe UI", 9))
+        dir_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        ttk.Button(frame_dir, text="Browse…", command=self._browse_folder).grid(row=0, column=1)
 
         # --- File list ---
-        frame_files = ttk.LabelFrame(self.root, text="Files", padding=8)
-        frame_files.pack(fill="both", expand=True, padx=10, pady=4)
+        frame_files = ttk.LabelFrame(main, text="Files", padding=(12, 8))
+        frame_files.grid(row=1, column=0, sticky="nsew", pady=6)
+        frame_files.columnconfigure(0, weight=1)
+        frame_files.rowconfigure(0, weight=1)
 
         list_frame = ttk.Frame(frame_files)
-        list_frame.pack(fill="both", expand=True)
+        list_frame.grid(row=0, column=0, sticky="nsew")
+        list_frame.columnconfigure(0, weight=1)
+        list_frame.rowconfigure(0, weight=1)
 
         scrollbar = ttk.Scrollbar(list_frame, orient="vertical")
-        self.file_list = tk.Listbox(list_frame, selectmode="extended", height=10, yscrollcommand=scrollbar.set)
+        self.file_list = tk.Listbox(
+            list_frame, selectmode="extended", height=8,
+            yscrollcommand=scrollbar.set,
+            bg=self._listbox_bg, fg=self._fg,
+            selectbackground=self._listbox_sel, selectforeground="#ffffff",
+            font=("Segoe UI", 9), borderwidth=1, relief="solid",
+            highlightthickness=0, activestyle="none",
+        )
         scrollbar.config(command=self.file_list.yview)
-        self.file_list.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        self.file_list.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
 
         btn_frame = ttk.Frame(frame_files)
-        btn_frame.pack(fill="x", pady=(6, 0))
+        btn_frame.grid(row=1, column=0, sticky="w", pady=(8, 0))
         ttk.Button(btn_frame, text="Refresh", command=self._load_files).pack(side="left")
         ttk.Button(btn_frame, text="Select All", command=self._select_all).pack(side="left", padx=(6, 0))
         ttk.Button(btn_frame, text="Deselect All", command=self._deselect_all).pack(side="left", padx=(6, 0))
 
         # --- Options ---
-        frame_opts = ttk.LabelFrame(self.root, text="Options", padding=8)
-        frame_opts.pack(fill="x", padx=10, pady=4)
+        frame_opts = ttk.LabelFrame(main, text="Options", padding=(12, 8))
+        frame_opts.grid(row=2, column=0, sticky="ew", pady=6)
 
+        # Transcription section
+        transcription_header = ttk.Frame(frame_opts)
+        transcription_header.pack(fill="x", anchor="w")
         self.do_transcription_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(frame_opts, text="Run transcription", variable=self.do_transcription_var).pack(anchor="w")
-
+        ttk.Checkbutton(transcription_header, text="Run transcription", variable=self.do_transcription_var).pack(side="left")
         self.skip_existing_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(frame_opts, text="Skip existing output files", variable=self.skip_existing_var).pack(anchor="w")
+        ttk.Checkbutton(transcription_header, text="Skip existing", variable=self.skip_existing_var).pack(side="left", padx=(16, 0))
 
-        transcribe_model_row = ttk.Frame(frame_opts)
-        transcribe_model_row.pack(anchor="w", pady=(2, 0))
-        ttk.Label(transcribe_model_row, text="Whisper model:").pack(side="left", padx=(0, 4))
+        transcribe_opts_row = ttk.Frame(frame_opts)
+        transcribe_opts_row.pack(anchor="w", pady=(4, 0), padx=(20, 0))
+        ttk.Label(transcribe_opts_row, text="Model:").pack(side="left", padx=(0, 4))
         self.model_var = tk.StringVar(value="base")
-        model_combo = ttk.Combobox(transcribe_model_row, textvariable=self.model_var, state="readonly", width=12,
+        model_combo = ttk.Combobox(transcribe_opts_row, textvariable=self.model_var, state="readonly", width=10,
                                    values=["tiny", "base", "small", "medium", "large"])
         model_combo.pack(side="left")
-
-        language_row = ttk.Frame(frame_opts)
-        language_row.pack(anchor="w", pady=(2, 0))
-        ttk.Label(language_row, text="Language:").pack(side="left", padx=(0, 4))
+        ttk.Label(transcribe_opts_row, text="Language:").pack(side="left", padx=(16, 4))
         self.language_var = tk.StringVar(value="auto")
         language_combo = ttk.Combobox(
-            language_row,
+            transcribe_opts_row,
             textvariable=self.language_var,
             state="readonly",
-            width=12,
+            width=8,
             values=WHISPER_LANGUAGE_OPTIONS,
         )
         language_combo.pack(side="left")
 
-        ttk.Separator(frame_opts, orient="horizontal").pack(fill="x", pady=6)
+        ttk.Separator(frame_opts, orient="horizontal").pack(fill="x", pady=8)
 
+        # Diarization section
         self.do_diarization_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(frame_opts, text="Run diarization", variable=self.do_diarization_var).pack(anchor="w")
 
-        diar_model_row = ttk.Frame(frame_opts)
-        diar_model_row.pack(anchor="w", pady=(2, 0))
-        ttk.Label(diar_model_row, text="Diarization model:").pack(side="left", padx=(0, 4))
-        self.diar_model_var = tk.StringVar(value=DEFAULT_DIARIZATION_MODEL)
-        ttk.Entry(diar_model_row, textvariable=self.diar_model_var, width=34).pack(side="left")
+        diar_grid = ttk.Frame(frame_opts)
+        diar_grid.pack(anchor="w", pady=(4, 0), padx=(20, 0))
 
-        token_row = ttk.Frame(frame_opts)
-        token_row.pack(anchor="w", pady=(2, 0))
-        ttk.Label(token_row, text="HF token:").pack(side="left", padx=(0, 4))
+        ttk.Label(diar_grid, text="Model:").grid(row=0, column=0, sticky="w", padx=(0, 4), pady=2)
+        self.diar_model_var = tk.StringVar(value=DEFAULT_DIARIZATION_MODEL)
+        ttk.Entry(diar_grid, textvariable=self.diar_model_var, width=36, font=("Segoe UI", 9)).grid(row=0, column=1, sticky="w", pady=2)
+
+        ttk.Label(diar_grid, text="HF token:").grid(row=1, column=0, sticky="w", padx=(0, 4), pady=2)
         self.hf_token_var = tk.StringVar(value=os.environ.get("HF_TOKEN", ""))
-        ttk.Entry(token_row, textvariable=self.hf_token_var, width=34, show="*").pack(side="left")
+        ttk.Entry(diar_grid, textvariable=self.hf_token_var, width=36, show="•", font=("Segoe UI", 9)).grid(row=1, column=1, sticky="w", pady=2)
 
         diar_opts_row = ttk.Frame(frame_opts)
-        diar_opts_row.pack(anchor="w", pady=(2, 0))
+        diar_opts_row.pack(anchor="w", pady=(4, 0), padx=(20, 0))
         self.use_gpu_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(diar_opts_row, text="Use GPU", variable=self.use_gpu_var).pack(side="left")
-        ttk.Label(diar_opts_row, text="Num speakers:").pack(side="left", padx=(10, 4))
+        ttk.Label(diar_opts_row, text="Speakers:").pack(side="left", padx=(16, 4))
         self.num_speakers_var = tk.StringVar(value="")
-        ttk.Entry(diar_opts_row, textvariable=self.num_speakers_var, width=6).pack(side="left")
+        ttk.Entry(diar_opts_row, textvariable=self.num_speakers_var, width=5, font=("Segoe UI", 9)).pack(side="left")
 
         # --- Progress ---
-        frame_prog = ttk.LabelFrame(self.root, text="Progress", padding=8)
-        frame_prog.pack(fill="x", padx=10, pady=4)
+        frame_prog = ttk.LabelFrame(main, text="Progress", padding=(12, 8))
+        frame_prog.grid(row=3, column=0, sticky="ew", pady=6)
+        frame_prog.columnconfigure(0, weight=1)
 
         self.progress_var = tk.DoubleVar()
         self.progress_bar = ttk.Progressbar(frame_prog, variable=self.progress_var, maximum=100)
-        self.progress_bar.pack(fill="x")
+        self.progress_bar.grid(row=0, column=0, sticky="ew")
 
         self.status_var = tk.StringVar(value="Ready")
-        ttk.Label(frame_prog, textvariable=self.status_var).pack(anchor="w", pady=(4, 0))
+        ttk.Label(frame_prog, textvariable=self.status_var, style="Status.TLabel").grid(row=1, column=0, sticky="w", pady=(4, 0))
 
         # --- Log ---
-        frame_log = ttk.LabelFrame(self.root, text="Log", padding=8)
-        frame_log.pack(fill="both", expand=True, padx=10, pady=4)
+        frame_log = ttk.LabelFrame(main, text="Log", padding=(12, 8))
+        frame_log.grid(row=4, column=0, sticky="nsew", pady=6)
+        frame_log.columnconfigure(0, weight=1)
+        frame_log.rowconfigure(1, weight=1)
 
         log_controls = ttk.Frame(frame_log)
-        log_controls.pack(fill="x", pady=(0, 6))
+        log_controls.grid(row=0, column=0, sticky="w", pady=(0, 6))
         ttk.Button(log_controls, text="Copy Output", command=self._copy_output).pack(side="left")
 
-        self.log_text = tk.Text(frame_log, height=8, state="disabled", wrap="word")
-        self.log_text.pack(fill="both", expand=True)
+        log_frame = ttk.Frame(frame_log)
+        log_frame.grid(row=1, column=0, sticky="nsew")
+        log_frame.columnconfigure(0, weight=1)
+        log_frame.rowconfigure(0, weight=1)
 
-        # --- Buttons ---
-        frame_btns = ttk.Frame(self.root, padding=8)
-        frame_btns.pack(fill="x", padx=10, pady=(0, 10))
+        log_scrollbar = ttk.Scrollbar(log_frame, orient="vertical")
+        self.log_text = tk.Text(
+            log_frame, height=8, state="disabled", wrap="word",
+            bg=self._log_bg, fg=self._log_fg,
+            font=("Consolas", 9), borderwidth=1, relief="solid",
+            insertbackground=self._log_fg, highlightthickness=0,
+            padx=8, pady=6,
+            yscrollcommand=log_scrollbar.set,
+        )
+        log_scrollbar.config(command=self.log_text.yview)
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+        log_scrollbar.grid(row=0, column=1, sticky="ns")
 
-        self.start_btn = ttk.Button(frame_btns, text="Start Processing", command=self._start)
+        # --- Action Buttons ---
+        frame_btns = ttk.Frame(main)
+        frame_btns.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+
+        self.start_btn = ttk.Button(frame_btns, text="▶  Start Processing", command=self._start, style="Accent.TButton")
         self.start_btn.pack(side="left")
 
         self.cancel_btn = ttk.Button(frame_btns, text="Cancel", command=self._cancel, state="disabled")
-        self.cancel_btn.pack(side="left", padx=(6, 0))
+        self.cancel_btn.pack(side="left", padx=(10, 0))
 
         self.save_close_btn = ttk.Button(frame_btns, text="Save and Close", command=self._save_and_close)
         self.save_close_btn.pack(side="right")
